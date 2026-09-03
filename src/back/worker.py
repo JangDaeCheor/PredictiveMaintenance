@@ -1,26 +1,31 @@
+from __future__ import annotations
+
 import threading
 from abc import ABC, abstractmethod
-from queue import Queue
+from queue import Queue, Empty
 
-from dataclasses import dataclass
-from typing import Any
-
-
-@dataclass
-class Message:
-  type: str
-  content: Any = None
+from message import Message, MessageType, Event
 
 
 class Worker(threading.Thread, ABC):
-  def __init__(self):
-    super().__init__(daemon=True)
+  def __init__(self, name):
+    super().__init__(daemon=True, name=name)
 
-    self.message_queue = Queue()
+    self._emit_message = Queue()
+    self._received_message = Queue()
     self._stop_event = threading.Event()
 
-  def send(self, message: Message):
-    self.message_queue.put(message)
+  def _emit(self, message: Message):
+    self._emit_message.put(message)
+
+  def take_message(self):
+    try:
+      return self._emit_message.get_nowait()
+    except Empty:
+      return None
+
+  def receive_message(self, message):
+    self._received_message.put(message)
 
   def stop(self):
     self._stop_event.set()
@@ -31,19 +36,19 @@ class Worker(threading.Thread, ABC):
 
   def run(self):
     try:
-      self.send("event", "start")
+      self._emit("event", "start")
 
-      feedback = self.execute()
+      feedback = self._handle_message()
 
       if feedback is not None:
-        self.send(Message("feedback", feedback))
+        self._emit(Message(MessageType.FEEDBACK, feedback))
 
     except Exception as e:
-      self.send(Message("error", str(e)))
+      self._emit(Message(MessageType.ERROR, str(e)))
 
     finally:
-      self.send(Message("event", "finish"))
+      self._emit(Message(MessageType.EVENT, Event.Finish))
 
   @abstractmethod
-  def execute(self):
+  def _handle_message(self):
     raise NotImplementedError

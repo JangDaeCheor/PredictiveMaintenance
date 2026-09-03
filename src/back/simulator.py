@@ -14,10 +14,13 @@ CNC 밀링 설비 3대를 1분 단위로 시뮬레이션
 # class User:
 #     def get_friend(self) -> User:
 from __future__ import annotations
+import logging
 import numpy as np
 import pandas as pd
+from queue import Empty
 
-from worker import Worker, Message
+from message import MessageType, Message, Event, WorkerName
+from worker import Worker
 
 MACHINES = {
   # machine_id : (품질등급, 과부하 한계, 공구 교체주기(분))
@@ -42,13 +45,16 @@ class Simulator(Worker):
   def __init__(
     self, machine_id: str, n_minutes: int, start: pd.Timestamp, rng: np.random.Generator
   ):
-    super().__init__()
+    super().__init__(WorkerName.Simulator.value)
+    self.logger = logging.getLogger()
+    self.logger.info("Simulator Start")
 
     self.machine_id = machine_id
     self.time_start = start
     self.n_minutes = n_minutes
     self._rng = rng
 
+  # n_minutes만큼 1분 간격으로 데이터 생성
   def _simulate_one(self, start, n_minutes, machine_id):
     spec = MACHINES[machine_id]
 
@@ -166,7 +172,9 @@ class Simulator(Worker):
     )
 
   def _calculate_power_w(self, torque, rpm):
-    return torque * rpm * 2 * np.pi / 60.0
+    # 전력 계산 : P(전력, W) = T(토크, N/m) * w(각속도, rad/s)
+    # w = rpm * 2*pi / 60
+    return torque * rpm * 2 * np.pi / 60.0  # T * w
 
   def _calculate_process_temp(self, n_minutes, air, power_w, wear, hvac):
     # 공정온도 = 공기온도 + 전력에의한열 + 마모(wera)에의한열 + 노이즈
@@ -196,5 +204,18 @@ class Simulator(Worker):
     humid = 55 - 1.8 * (air - 298) + self._rng.normal(0, 2.5, n_minutes)
     humid = np.clip(humid, 15, 95)
 
-  def execute(self):
+  def simulate_truth(self):
     pass
+
+  def _handle_message(self):
+    try:
+      message: Message = self._received_message.get_nowait()
+
+      feedback = None
+      if message.type == MessageType.EVENT:
+        if message.content == Event.Simulate:
+          pass
+
+      return feedback
+    except Empty:
+      return None
