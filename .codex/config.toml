@@ -1,0 +1,16 @@
+# 프로젝트별 Codex 기본 설정입니다.
+# 이 프로젝트가 신뢰 상태일 때만 Codex가 이 파일을 불러옵니다.
+
+# 현재 권한 프로필의 범위를 벗어나는 작업은 실행 전에 승인을 요청합니다.
+approval_policy = "on-request"
+
+# Codex 내장 권한 프로필입니다.
+default_permissions = ":read-only"
+
+# 권장되는 Windows 네이티브 샌드박스 구현을 사용합니다.
+[windows]
+sandbox = "elevated"
+
+# python 실행시 __pycache__ 생성 금지
+[shell_environment_policy]
+set = { PYTHONDONTWRITEBYTECODE = "1" }
