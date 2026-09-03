@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import threading
 from abc import ABC, abstractmethod
 from queue import Queue
@@ -15,8 +13,8 @@ class Message:
 
 
 class Worker(threading.Thread, ABC):
-  def __init__(self, daemon: bool):
-    super().__init__(daemon=daemon)
+  def __init__(self):
+    super().__init__(daemon=True)
 
     self.message_queue = Queue()
     self._stop_event = threading.Event()

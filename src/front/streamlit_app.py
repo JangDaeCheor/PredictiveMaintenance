@@ -5,8 +5,8 @@ from pathlib import Path
 
 import streamlit as st
 
-P_GUI = Path(__file__).parent
-P_TEST = P_GUI / "test"
+P_FRONT = Path(__file__).parent
+P_TEST = P_FRONT / "test"
 
 
 def handle_button():
