@@ -20,7 +20,7 @@ import pandas as pd
 from queue import Empty
 
 from message import MessageType, Message, Event, WorkerName
-from worker import Worker
+from back.worker import Worker
 
 MACHINES = {
   # machine_id : (품질등급, 과부하 한계, 공구 교체주기(분))
@@ -204,8 +204,18 @@ class Simulator(Worker):
     humid = 55 - 1.8 * (air - 298) + self._rng.normal(0, 2.5, n_minutes)
     humid = np.clip(humid, 15, 95)
 
-  def simulate_truth(self):
-    pass
+  def simulate_truth(
+    self,
+    n_minutes: int = 1440,
+    start: str | pd.Timestamp = "2024-01-01",
+    seed: int = 42,
+  ) -> pd.DataFrame:
+    """오염 없는 참값을 생성합니다."""
+    rng = np.random.default_rng(seed)
+    start = pd.Timestamp(start)
+    parts = [self._simulate_one(m, n_minutes, start, rng) for m in MACHINES]
+    out = pd.concat(parts, ignore_index=True)
+    return out.sort_values(["ts", "machine_id"]).reset_index(drop=True)
 
   def _handle_message(self):
     try:
