@@ -1,6 +1,15 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+import json
+
+from datetime import date
+from pydantic import BaseModel
+
+
+class SimulatorRequest(BaseModel):
+  start: date
+  n_minutes: int
 
 
 class MessageType(Enum):
@@ -9,14 +18,22 @@ class MessageType(Enum):
   FEEDBACK = "feedback"
 
 
-class Event(Enum):
-  Simulate = "simulate"
+class Event:
+  SimulateTruth = "simulate_truth"
   Finish = "finish"
+
+  def __init__(self, event, content: dict):
+    self.event = event
+    self.content = content
+
+  # def toJsonString(self):
+  #   return json.dumps(self, default=lambda o: o.__dict__, indent=4)
 
 
 class WorkerName(Enum):
   Simulator = "simulator"
   GUI = "gui"
+  MainManager = "mainmanager"
 
 
 @dataclass

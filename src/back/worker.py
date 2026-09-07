@@ -4,7 +4,7 @@ import threading
 from abc import ABC, abstractmethod
 from queue import Queue, Empty
 
-from message import Message, MessageType, Event
+from back.message import Message, MessageType, Event
 
 
 class Worker(threading.Thread, ABC):
@@ -15,10 +15,12 @@ class Worker(threading.Thread, ABC):
     self._received_message = Queue()
     self._stop_event = threading.Event()
 
+    # self._emit(start)
+
   def _emit(self, message: Message):
     self._emit_message.put(message)
 
-  def take_message(self):
+  def take_message(self) -> Message:
     try:
       return self._emit_message.get_nowait()
     except Empty:
@@ -35,19 +37,20 @@ class Worker(threading.Thread, ABC):
     return self._stop_event.is_set()
 
   def run(self):
-    try:
-      self._emit("event", "start")
+    while not self.stopped:
+      try:
+        feedback = self._handle_message()
 
-      feedback = self._handle_message()
+        if feedback is not None:
+          self._emit(Message(MessageType.FEEDBACK, feedback))
 
-      if feedback is not None:
-        self._emit(Message(MessageType.FEEDBACK, feedback))
+      except Exception as e:
+        self._emit(Message(MessageType.ERROR, str(e)))
 
-    except Exception as e:
-      self._emit(Message(MessageType.ERROR, str(e)))
+      self._stop_event.wait(0.05)  # 50ms
 
-    finally:
-      self._emit(Message(MessageType.EVENT, Event.Finish))
+    # finally:
+    #   self._emit(Message(MessageType.EVENT, Event.Finish))
 
   @abstractmethod
   def _handle_message(self):

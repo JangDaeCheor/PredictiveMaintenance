@@ -13,13 +13,14 @@ CNC 밀링 설비 3대를 1분 단위로 시뮬레이션
 # 파이썬 타입 힌트(annotation)를 바로 평가하지 않고 문자열 형태 저장.
 # class User:
 #     def get_friend(self) -> User:
-from __future__ import annotations
-import logging
+# from __future__ import annotations
+
+# import logging
 import numpy as np
 import pandas as pd
 from queue import Empty
 
-from message import MessageType, Message, Event, WorkerName
+from back.message import MessageType, Message, Event, WorkerName
 from back.worker import Worker
 
 MACHINES = {
@@ -42,17 +43,12 @@ POLLUTION = {
 
 
 class Simulator(Worker):
-  def __init__(
-    self, machine_id: str, n_minutes: int, start: pd.Timestamp, rng: np.random.Generator
-  ):
+  def __init__(self, rng: int):
     super().__init__(WorkerName.Simulator.value)
-    self.logger = logging.getLogger()
-    self.logger.info("Simulator Start")
+    # self.logger = logging.getLogger()
+    # self.logger.info("Simulator Start")
 
-    self.machine_id = machine_id
-    self.time_start = start
-    self.n_minutes = n_minutes
-    self._rng = rng
+    self._rng = np.random.default_rng(rng)
 
   # n_minutes만큼 1분 간격으로 데이터 생성
   def _simulate_one(self, start, n_minutes, machine_id):
@@ -62,7 +58,7 @@ class Simulator(Worker):
     hour = self._calculate_hours(ts)
     duty = self._calculate_dutys(hour, n_minutes)
     hvac = self._simulate_havc_fails(n_minutes)
-    air = self._calculate_air(n_minutes, hvac)
+    air = self._calculate_air(n_minutes, hour, hvac)
     wear = self._calcuate_wear(n_minutes, spec["tool_life"], duty)
     rpm = self._calculate_rpm(n_minutes, duty)
     torque = self._calculate_torque(n_minutes, duty, wear)
@@ -133,9 +129,9 @@ class Simulator(Worker):
       havc_fail[start : start + self._rng.integers(40, 120)] = True
     return havc_fail
 
-  def _calculate_air(self, n_minutes, hvac_fail):
+  def _calculate_air(self, n_minutes, hour, hvac_fail):
     # air = 기준온도 + 하루동안온도변화
-    air = 298.0 + 2.0 * np.sin((self._hour - 14) / 24 * 2 * np.pi)
+    air = 298.0 + 2.0 * np.sin((hour - 14) / 24 * 2 * np.pi)
     # 랜덤워크(누적된 랜덤값) 추가
     air = air + np.cumsum(self._rng.normal(0, 0.02, n_minutes))
     # 순간적 랜덤 노이즈 추가
@@ -202,18 +198,14 @@ class Simulator(Worker):
   def _calculate_humid(self, n_minutes, air):
     # --- 습도: 온도와 약한 음의 관계 ---
     humid = 55 - 1.8 * (air - 298) + self._rng.normal(0, 2.5, n_minutes)
-    humid = np.clip(humid, 15, 95)
+    return np.clip(humid, 15, 95)
 
   def simulate_truth(
-    self,
-    n_minutes: int = 1440,
-    start: str | pd.Timestamp = "2024-01-01",
-    seed: int = 42,
+    self, n_minutes: int = 1440, start: str | pd.Timestamp = "2024-01-01"
   ) -> pd.DataFrame:
     """오염 없는 참값을 생성합니다."""
-    rng = np.random.default_rng(seed)
     start = pd.Timestamp(start)
-    parts = [self._simulate_one(m, n_minutes, start, rng) for m in MACHINES]
+    parts = [self._simulate_one(start, n_minutes, m) for m in MACHINES]
     out = pd.concat(parts, ignore_index=True)
     return out.sort_values(["ts", "machine_id"]).reset_index(drop=True)
 
@@ -223,8 +215,10 @@ class Simulator(Worker):
 
       feedback = None
       if message.type == MessageType.EVENT:
-        if message.content == Event.Simulate:
-          pass
+        if message.content.event == Event.SimulateTruth:
+          feedback = self.simulate_truth(
+            message.content.content["n_minutes"], message.content.content["start"]
+          )
 
       return feedback
     except Empty:

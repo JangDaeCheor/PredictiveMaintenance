@@ -18,8 +18,6 @@ class MainApp:
 
     self.init_state()
 
-    st.write("test")
-
   @st.fragment(run_every="2s")
   def run(self):
     self.polling()
@@ -28,28 +26,28 @@ class MainApp:
 
   def simulator_form(self):
     start_date = st.date_input("시작 날짜")
-    n_samples = st.number_input("생성 개수", min_value=1, value=100)
+    n_minutes = st.number_input("생성 개수", min_value=1, value=100)
 
     if st.button("simulate truth", disabled=st.session_state.simulator["polling"]):
-      self.poll_truth(start_date.isoformat(), int(n_samples))
+      self.poll_truth(start_date.isoformat(), int(n_minutes))
 
     data = st.session_state.simulator["truth"]
     if data is not None:
       st.success("시뮬레이션 완료")
-      st.dataframe(data, use_container_width=True)
+      st.dataframe(pd.DataFrame(data).head(), width="stretch")
 
   def init_state(self):
     if "simulator" not in st.session_state:
       st.session_state.simulator = {"truth": None, "polling": False}
 
-  def poll_truth(self, start: str, n_samples: int):
+  def poll_truth(self, start: str, n_minutes: int):
     if st.session_state.simulator["polling"]:
       return
 
     try:
       response = requests.post(
         f"{API_URL}/simulator/truth",
-        json={"start": start, "n_samples": n_samples},
+        json={"start": start, "n_minutes": n_minutes},
         timeout=(3, 10),
       )
       response.raise_for_status()
