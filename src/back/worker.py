@@ -49,8 +49,10 @@ class Worker(threading.Thread, ABC):
 
       self._stop_event.wait(0.05)  # 50ms
 
-    # finally:
-    #   self._emit(Message(MessageType.EVENT, Event.Finish))
+    self._finally_run()
+
+  def _finally_run(self):
+    pass
 
   @abstractmethod
   def _handle_message(self):

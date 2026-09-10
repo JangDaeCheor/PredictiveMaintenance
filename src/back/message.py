@@ -20,7 +20,11 @@ class MessageType(Enum):
 
 class Event:
   SimulateTruth = "simulate_truth"
-  Finish = "finish"
+  DBInsert = "db_insert"
+  DBUpdate = "db_update"
+  DBDelete = "db_delete"
+  DBSelect = "db_select"
+  Error = "error"
 
   def __init__(self, event, content: dict):
     self.event = event
@@ -34,6 +38,7 @@ class WorkerName(Enum):
   Simulator = "simulator"
   GUI = "gui"
   MainManager = "mainmanager"
+  DB = "db"
 
 
 @dataclass
