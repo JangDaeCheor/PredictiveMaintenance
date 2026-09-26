@@ -13,6 +13,7 @@ class Worker(threading.Thread, ABC):
 
     self._emit_message = Queue()
     self._received_message = Queue()
+    self._running_message = None
     self._stop_event = threading.Event()
 
     # self._emit(start)
@@ -41,11 +42,30 @@ class Worker(threading.Thread, ABC):
       try:
         feedback = self._handle_message()
 
-        if feedback is not None:
-          self._emit(Message(MessageType.FEEDBACK, feedback))
+        if feedback is not None and self._running_message is not None:
+          self._emit(
+            Message(
+              self._running_message.id,
+              MessageType.FEEDBACK,
+              self._running_message.status,
+              feedback,
+            )
+          )
+          self._running_message = None
 
       except Exception as e:
-        self._emit(Message(MessageType.ERROR, str(e)))
+        if self._running_message is not None:
+          self._emit(
+            Message(
+              self._running_message.id,
+              MessageType.ERROR,
+              self._running_message.status,
+              str(e),
+            )
+          )
+          self._running_message = None
+        else:
+          pass  # work 중이 아닐 때 log
 
       self._stop_event.wait(0.05)  # 50ms
 

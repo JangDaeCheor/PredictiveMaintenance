@@ -13,10 +13,19 @@ API_URL = "http://127.0.0.1:8000"
 # streamlit run app.py
 class MainApp:
   def __init__(self):
+    self.process_id = 0
+    self.process = {}
+
     st.set_page_config(page_title="설비 예지 보전 대시보드", layout="wide")
     st.title("설비 예지 보전 대시보드")
 
     self.init_state()
+
+  def new_process(self):
+    if self.process_id >= 9999:
+      self.process_id = 0
+    self.process_id += 1
+    return self.process_id
 
   @st.fragment(run_every="2s")
   def run(self):
@@ -44,10 +53,14 @@ class MainApp:
     if st.session_state.simulator["polling"]:
       return
 
+    command = "/simulator/truth"
+    id = self.new_process()
+    self.process[id] = command
+
     try:
       response = requests.post(
-        f"{API_URL}/simulator/truth",
-        json={"start": start, "n_minutes": n_minutes},
+        f"{API_URL}{command}",
+        json={"id": id, "start": start, "n_minutes": n_minutes},
         timeout=(3, 10),
       )
       response.raise_for_status()
@@ -59,10 +72,10 @@ class MainApp:
     except requests.RequestException as e:
       st.error(f"시뮬레이션 시작 실패: {e}")
 
-  def load_data(self, data):
+  def load_data(self, id, data):
     try:
       # timeout=(연결 제한 시간, 응답 읽기 제한 시간)
-      response = requests.get(f"{API_URL}/{data}", timeout=(3, 30))
+      response = requests.get(f"{API_URL}/{data}", json={"id": id}, timeout=(3, 30))
       response.raise_for_status()
 
       return response.json()
@@ -71,19 +84,24 @@ class MainApp:
 
   def polling(self):
     if st.session_state.simulator["polling"]:
-      status = self.get_status("simulator")
+      for id, cmd in self.process.items():
+        status = self.get_status(id, cmd.split("/")[1])
 
-      if status is None:
-        st.session_state.simulator["polling"] = False
-        st.session_state.simulator["truth"] = None
-      elif status == "completed":
-        st.session_state.simulator["truth"] = self.load_data("simulator/truth")
-        st.session_state.simulator["polling"] = False
+        if status is None:
+          st.session_state.simulator["polling"] = False
+          st.session_state.simulator["truth"] = None
+        elif status == "completed":
+          st.session_state.simulator["truth"] = self.load_data(id, "simulator/truth")
+          st.session_state.simulator["polling"] = False
 
-  def get_status(self, data):
+  def get_status(self, id, data):
     try:
       # timeout=(연결 제한 시간, 응답 읽기 제한 시간)
-      response = requests.get(f"{API_URL}/{data}/status", timeout=(3, 5))
+      response = requests.get(
+        f"{API_URL}/{data}/status",
+        json={"id": id},
+        timeout=(3, 5),
+      )
       response.raise_for_status()
       return response.text
     except requests.RequestException as e:

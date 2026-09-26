@@ -41,9 +41,17 @@ class WorkerName(Enum):
   DB = "db"
 
 
+class Status(Enum):
+  Running = "running"
+  Failed = "failed"
+  Completed = "completed"
+
+
 @dataclass
 class Message:
+  id: int
   type: MessageType
+  status: str
   content: Any = None
 
 

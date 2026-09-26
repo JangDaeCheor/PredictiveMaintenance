@@ -245,6 +245,3 @@ class DB(Worker):
       return feedback
     except Empty:
       return None
-    except KeyError as e:
-      self._emit(ms.Message(ms.MessageType.ERROR, e))
-      return None

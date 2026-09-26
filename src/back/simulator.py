@@ -212,6 +212,7 @@ class Simulator(Worker):
   def _handle_message(self):
     try:
       message: Message = self._received_message.get_nowait()
+      self._running_message = message
 
       feedback = None
       if message.type == MessageType.EVENT:
