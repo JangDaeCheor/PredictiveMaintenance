@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
-import json
 
 from datetime import date
 from pydantic import BaseModel
@@ -45,6 +44,7 @@ class Status(Enum):
   Running = "running"
   Failed = "failed"
   Completed = "completed"
+  Non = "none"
 
 
 @dataclass

@@ -226,6 +226,7 @@ class DB(Worker):
 
     try:
       message: ms.Message = self._received_message.get_nowait()
+      self._running_message = message
 
       feedback = None
       if message.type == ms.MessageType.EVENT:
@@ -243,5 +244,5 @@ class DB(Worker):
           feedback = self._update(message.content.content)
 
       return feedback
-    except Empty:
+    except Empty: # queue 없음. 이벤트 없음
       return None

@@ -4,6 +4,12 @@ import pandas as pd
 
 import streamlit as st
 
+from enum import Enum
+
+class WorkerName(Enum):
+  Simulator = "simulator"
+  DB = "db"
+
 P_FRONT = Path(__file__).parent
 P_TEST = P_FRONT / "test"
 
@@ -46,14 +52,14 @@ class MainApp:
       st.dataframe(pd.DataFrame(data).head(), width="stretch")
 
   def init_state(self):
-    if "simulator" not in st.session_state:
+    if WorkerName.Simulator.value not in st.session_state:
       st.session_state.simulator = {"truth": None, "polling": False}
 
   def poll_truth(self, start: str, n_minutes: int):
     if st.session_state.simulator["polling"]:
       return
 
-    command = "/simulator/truth"
+    command = f"/{WorkerName.Simulator.value}/truth"
     id = self.new_process()
     self.process[id] = command
 
@@ -82,17 +88,43 @@ class MainApp:
     except requests.RequestException as e:
       st.error(f"데이터 조회 실패: {e}")
 
-  def polling(self):
-    if st.session_state.simulator["polling"]:
-      for id, cmd in self.process.items():
-        status = self.get_status(id, cmd.split("/")[1])
+  def poll_simulator_truth(self, response, id):
+    if response is None: # 상태 조회 실패
+      st.session_state.simulator["polling"] = False
+      st.session_state.simulator["truth"] = None
+    else:
+      status = response["status"]
 
-        if status is None:
-          st.session_state.simulator["polling"] = False
-          st.session_state.simulator["truth"] = None
-        elif status == "completed":
-          st.session_state.simulator["truth"] = self.load_data(id, "simulator/truth")
-          st.session_state.simulator["polling"] = False
+      if status == "none": # app에는 process가 있는데 back은 process가 없는 상태
+        st.session_state.simulator["polling"] = False
+        st.session_state.simulator["truth"] = None
+        st.error("process error")
+      elif status == "completed":
+        st.session_state.simulator["truth"] = self.load_data(id, "simulator/truth")
+        st.session_state.simulator["polling"] = False
+        return id
+      elif status == "failed":
+        st.session_state.simulator["polling"] = False
+        st.session_state.simulator["truth"] = None
+        st.error(f"back error: {response["error"]}")
+        return id
+      elif status == "running":
+        st.session_state.simulator["polling"] = True
+        st.session_state.simulator["truth"] = None
+
+      return None
+
+  def polling(self):
+    end_process = []
+    for id, cmd in self.process.items():
+      response = self.get_status(id, cmd.split("/")[1])
+
+      if cmd.split("/")[1] == WorkerName.Simulator.value:
+        end = self.poll_simulator_truth(response, id)
+        if end is not None: end_process.append(end)
+
+    for proc in end_process:
+      self.process.pop(proc)
 
   def get_status(self, id, data):
     try:
@@ -103,7 +135,7 @@ class MainApp:
         timeout=(3, 5),
       )
       response.raise_for_status()
-      return response.text
+      return response.json()
     except requests.RequestException as e:
       st.error(f"상태 조회 실패: {e}")
       return

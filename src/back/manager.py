@@ -55,8 +55,9 @@ class MainManager(Worker):
   def get_running_event(self, event):
     works = []
     for work in self._running_work:
-      if work.content.event == event:
-        works.append(work)
+      if isinstance(work.content, ms.Event):
+        if work.content.event == event:
+          works.append(work)
     return works
 
   def del_work(self, work):
@@ -84,43 +85,40 @@ class MainManager(Worker):
 
   # 결과 응답시 결과 데이터를 발송하고 삭제하므로 front에서 결과 응답을 놓칠 시 이후에는 409error 발생
   def get_simulator_truth(self, params: dict = Body(...)):
-    data = None
+    work = self.get_running_work(params["id"])
 
-    for work in self._running_work:
-      if work.id == params["id"]:
-        if work.content.event == ms.Event.DBInsert:
-          self._running_work.remove(work)
-        elif work.content.event == ms.Event.SimulateTruth:
-          if work.status == ms.Status.Completed:
-            data = work.content
-          elif work.status == ms.Status.Failed:
-            data = ms.Status.Failed
-
-    if data == ms.Status.Failed:
+    if work is None:
       raise HTTPException(status_code=409, detail="시뮬레이션 결과가 없음")
-    elif data is not None:
-      return Response(
-        content=data.to_json(orient="records", date_format="iso"),
+    elif work.status == ms.Status.Running:
+      raise HTTPException(status_code=409, detail="시뮬레이션 진행 중")
+    elif work.status == ms.Status.Failed:
+      self._running_work.remove(work)
+      raise HTTPException(status_code=409, detail="시뮬레이션 실패")
+    elif work.status == ms.Status.Completed:
+      response = Response(
+        content=work.content.content.to_json(orient="records", date_format="iso"),
         media_type="application/json",
       )
-
-    raise HTTPException(status_code=409, detail="시뮬레이션 결과가 없음")
+      self._running_work.remove(work) # 전송 중 타임아웃이 발생하면 다시 결과를 받을 수 없음.
+      return response
 
   # 상태 조회시 완료 상태면 삭제하므로 front에서 완료 응답을 놓칠 시 이후에는 "none"만 받음
   def response_simulator_status(self, params: dict = Body(...)):
     work = self.get_running_work(params["id"])
 
     if work is None:
-      return PlainTextResponse("none")
-
-    return PlainTextResponse(work.status.value)
+      return {"status": ms.Status.Non.value, "error": None}
+    elif work.status == ms.Status.Failed:
+      return {"status": work.status.value, "error": work.content}
+    else:
+      return {"status": work.status.value, "error": None}
 
   def _handle_message(self):
     works = self.get_running_event(ms.Event.SimulateTruth)
     msg_simulator = self.simulator.take_message()
 
     if msg_simulator is not None and len(works) != 0:
-      work = next((w for w in works if w.id == msg_simulator.id), None)
+      work = self.get_running_work(msg_simulator.id)
 
       if work is None:
         pass  # simulator에서 받아온 work가 MainManager에 저장되어 있지 않음..
@@ -135,13 +133,14 @@ class MainManager(Worker):
       elif msg_simulator.type == ms.MessageType.ERROR:
         self._running_work.remove(work)
         work.status = ms.Status.Failed
+        work.content = msg_simulator.content
         self._running_work.append(work)
 
     works = self.get_running_event(ms.Event.DBInsert)
     msg_db = self.db.take_message()
 
     if msg_db is not None and len(works) != 0:
-      work = next((w for w in works if w.id == msg_db.id), None)
+      work = self.get_running_work(msg_db.id)
 
       if work is None:
         pass
@@ -152,6 +151,7 @@ class MainManager(Worker):
       elif msg_db.type == ms.MessageType.ERROR:
         self._running_work.remove(work)
         work.status = ms.Status.Failed
+        work.content = msg_db.content
         self._running_work.append(work)
 
 
